@@ -1,0 +1,96 @@
+title, "Model creator for java";
+option, -echo;
+call, file = "/afs/cern.ch/work/e/efol/public/master-beta-beat-commissioning/Beta-Beat.src/madx/lib/beta_beat.macros.madx";
+call, file = "/afs/cern.ch/work/e/efol/public/master-beta-beat-commissioning/Beta-Beat.src/madx/lib/lhc.macros.madx";
+call, file = "/afs/cern.ch/work/e/efol/public/master-beta-beat-commissioning/Beta-Beat.src/madx/lib/lhc_runII.macros.madx";
+call, file = "/afs/cern.ch/work/e/efol/public/master-beta-beat-commissioning/Beta-Beat.src/madx/lib/lhc_runII_ats.macros.madx";
+option, echo;
+
+! macro to assign systematic errors (with = instead of := the assgned errors are same for all selected magnets in the class)
+call, file="/afs/cern.ch/eng/lhc/optics/V6.5/errors/Esubroutines.madx";
+
+option, -echo;
+
+exec, full_lhc_def("%(OPTICS)s", 1);
+eoption, seed = %(SEED)s, add=true;
+ON_B2R = 1;
+GCUTR = 3; ! Cut for truncated gaussians (sigmas)
+exec, match_tunes(62.28, 60.31, 1);
+
+! exec, do_twiss_elements(LHCB1, "./validation/nom_b1_twiss_%(INDEX)s.tfs", 0.0);
+
+!!!! Global errors !!!!
+select, flag=error, clear;
+select, flag=error, pattern = "^MQ\..*B1";
+Rr = 0.017;
+B2r = 18; ! Set field errors magnitude, is different for every magnet class
+exec, SetEfcomp_Q;
+
+select, flag=error, clear;
+select, flag=error, pattern = "^MQM[LC]\..*B1";
+Rr = 0.017;
+B2r = 12;
+exec, SetEfcomp_Q;
+
+select, flag=error, clear;
+select, flag=error, pattern = "^MQM\..*B1";
+Rr = 0.017;
+B2r = 12;
+exec, SetEfcomp_Q;
+
+select, flag=error, clear;
+select, flag=error, pattern = "^MQY\..*B1";
+Rr = 0.017; // to be checked
+B2r = 8;
+exec, SetEfcomp_Q;
+
+select, flag=error, clear;
+select, flag=error, pattern = "^MQW[AB]\..*B1";
+Rr = 0.017;
+B2r = 15;
+exec, SetEfcomp_Q;
+
+! select, flag=error, clear;
+! select, flag=error, pattern = "^MQT\..*B1";
+! Rr = 0.017;
+! B2r = 15;
+! exec, SetEfcomp_Q;
+
+select, flag=error, clear;
+select, flag=error, pattern = "^MQTL[IH]\..*B1";
+Rr = 0.017;
+B2r = 15;
+exec, SetEfcomp_Q;
+
+select, flag=error, clear;
+select, flag=error, pattern = "^MQX[AB]\..*";
+! Triplet, common errors in both beams
+B2r = 4;
+ON_B2R = 1;
+B2sX = 10-20*RANF();
+ON_B2S = 1;
+Rr = 0.050;
+
+SetEfcomp_QEL: macro = {
+   Efcomp,  radius = Rr, order= 1,
+        dknr:={0,
+        1E-4*(B2sX*ON_B2S  + B2r*ON_B2R * TGAUSS(GCUTR))};
+        }
+select, flag=error, clear;
+select, flag=error, pattern = "^MQX[AB]\..*";
+
+exec, SetEfcomp_QEL;
+select, flag=error, pattern = "^MQX[AB]\..*";
+! save common triplet errors in a file, set in addition to individual errors
+esave, file="%(DIR)s/common_errors_%(INDEX)s.tfs";
+
+READMYTABLE, file="%(DIR)s/common_errors_%(INDEX)s.tfs", table=errtab;
+SETERR, TABLE=errtab;
+
+select, flag=error, class=quadrupole, pattern = "^MQ[^S].*B1$";
+esave, file="%(DIR)s/b1_errors_%(INDEX)s.tfs";
+
+exec, do_twiss_elements(LHCB1, "%(DIR)s/b1_twiss_before_match_%(INDEX)s.tfs", 0.0);
+exec, match_tunes(62.28, 60.31, 1);
+exec, do_twiss_elements(LHCB1, "%(DIR)s/b1_twiss_after_match_%(INDEX)s.tfs", 0.0);
+exec, do_twiss_monitors(LHCB1, "%(DIR)s/b1_twiss_%(INDEX)s.tfs", 0.0);

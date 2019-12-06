@@ -1,0 +1,22 @@
+option, -echo;
+call, file = "/afs/cern.ch/work/e/efol/public/master-beta-beat-commissioning/Beta-Beat.src/madx/lib/beta_beat.macros.madx";
+call, file = "/afs/cern.ch/work/e/efol/public/master-beta-beat-commissioning/Beta-Beat.src/madx/lib/lhc.macros.madx";
+call, file = "/afs/cern.ch/work/e/efol/public/master-beta-beat-commissioning/Beta-Beat.src/madx/lib/lhc_runII.macros.madx";
+call, file = "/afs/cern.ch/work/e/efol/public/master-beta-beat-commissioning/Beta-Beat.src/madx/lib/lhc_runII_ats.macros.madx";
+option, echo;
+
+title, "Model creator for java";
+
+!@require lhc_runII_ats.macros.madx
+
+option, -echo;
+exec, full_lhc_def("%(OPTICS)s", 1);
+option, echo;
+exec, match_tunes(62.28, 60.31, 1);
+exec, do_twiss_elements(LHCB1, "./nom_b1_twiss_test.tfs", 0.0);
+
+option, -echo;
+exec, full_lhc_def("%(OPTICS)s", 2);
+option, echo;
+exec, match_tunes(62.28, 60.31, 2);
+exec, do_twiss_elements(LHCB2, "./nom_b2_twiss_test.tfs", 0.0);
