@@ -7,7 +7,7 @@ from scipy import stats
 sys.path.append('/afs/cern.ch/work/e/efol/public/Beta-Beat.src/')
 from Utilities import tfs_pandas
 from madx import madx_wrapper
-from multiprocessing import Pool
+import multiprocessing
 import random
 from collections import OrderedDict
 
@@ -147,12 +147,12 @@ def get_input_for_beam(tw_perturbed_path, mdl_path, beam):
     return beta_star, delta_mux, delta_muy, delta_dx
 
 
-def main():
+def main(processes):
     # create_nominal_twiss(COLL_40CM)
     # create_samples_with_validation("test")
     print("Start")
     all_samples = []
-    pool = Pool(processes=8)
+    pool = multiprocessing.Pool(processes)
     all_samples = pool.map(create_samples_with_validation, range(NUM_SIM))
     pool.close()
     pool.join()
@@ -166,4 +166,5 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    processes = multiprocessing.cpu_count()
+    main(processes)
