@@ -7,51 +7,42 @@ from scipy import stats
 sys.path.append('/afs/cern.ch/work/e/efol/public/Beta-Beat.src/')
 from Utilities import tfs_pandas
 from madx import madx_wrapper
+from functools import partial
 import multiprocessing
 import random
+import argparse
+import ConfigParser
 from collections import OrderedDict
 
-MY_DIR = '/afs/cern.ch/work/e/efol/public/ML/LHC_quad_prediction/40cm_collision_realisticTriplet/40cm_2Beams/simulations'
-NUM_SIM = 8
-MADX_PATH = "/afs/cern.ch/user/m/mad/madx/releases/last-rel/madx-linux64-intel"
-COLL_40CM = '/afs/cern.ch/eng/lhc/optics/runII/2018/PROTON/opticsfile.19'
-MODEL_B1 = os.path.join(MY_DIR, "twiss.b1nominal.dat")
-MODEL_B2 = os.path.join(MY_DIR, 'twiss.b2nominal.dat')
-NOMINAL_TWISS_TEMPL = os.path.join(MY_DIR, 'job2018.nominal.madx')
-MAGNETS_TEMPLATE_B1 = os.path.join(MY_DIR, 'job.magneterrors_b1.madx')
-MAGNETS_TEMPLATE_B2 = os.path.join(MY_DIR, 'job.magneterrors_b2.madx')
-MADX_OUTPUT = os.path.join(MY_DIR, 'training')
-PATH_SAVED_DATA = os.path.join(MY_DIR, 'training_data.npy')
 
-
-def create_samples_with_validation(index):
+def create_samples_with_validation(templates, models, optics, output_path, madx_bin, index):
     sample = None
     print("Start creating dataset")
     np.random.seed(seed=None)
     print("Doing index: ", str(index))
     seed = random.randint(0, 999999999)
-    with open(MAGNETS_TEMPLATE_B1, 'r') as template:
+    with open(templates["B1"], 'r') as template:
         template_str = template.read()
-    madx_wrapper.resolve_and_run_string(template_str % {"DIR": MADX_OUTPUT, "INDEX": str(index), "OPTICS": COLL_40CM, "SEED": seed}, madx_path=MADX_PATH)
-    with open(MAGNETS_TEMPLATE_B2, 'r') as template:
+    madx_wrapper.resolve_and_run_string(template_str % {"DIR": output_path, "INDEX": str(index), "OPTICS": optics, "SEED": seed}, madx_path=madx_bin)
+    with open(templates["B2"], 'r') as template:
         template_str = template.read()
-    madx_wrapper.resolve_and_run_string(template_str % {"DIR": MADX_OUTPUT, "INDEX": str(index), "OPTICS": COLL_40CM, "SEED": seed}, madx_path=MADX_PATH)
+    madx_wrapper.resolve_and_run_string(template_str % {"DIR": output_path, "INDEX": str(index), "OPTICS": optics, "SEED": seed}, madx_path=madx_bin)
     # save data in sample
-    b1_errors_file_path = os.path.join(MADX_OUTPUT, "b1_errors_{}.tfs".format(index))
-    b2_errors_file_path = os.path.join(MADX_OUTPUT, "b2_errors_{}.tfs".format(index))
-    b1_tw_perturbed_path = os.path.join(MADX_OUTPUT, "b1_twiss_{}.tfs".format(index))
-    b2_tw_perturbed_path = os.path.join(MADX_OUTPUT, "b2_twiss_{}.tfs".format(index))
+    b1_errors_file_path = os.path.join(output_path, "b1_errors_{}.tfs".format(index))
+    b2_errors_file_path = os.path.join(output_path, "b2_errors_{}.tfs".format(index))
+    b1_tw_perturbed_path = os.path.join(output_path, "b1_twiss_{}.tfs".format(index))
+    b2_tw_perturbed_path = os.path.join(output_path, "b2_twiss_{}.tfs".format(index))
 
-    b1_tw_before_match = os.path.join(MADX_OUTPUT, "b1_twiss_before_match_{}.tfs".format(index))
-    b1_tw_after_match = os.path.join(MADX_OUTPUT, "b1_twiss_after_match_{}.tfs".format(index))
+    b1_tw_before_match = os.path.join(output_path, "b1_twiss_before_match_{}.tfs".format(index))
+    b1_tw_after_match = os.path.join(output_path, "b1_twiss_after_match_{}.tfs".format(index))
 
-    b2_tw_before_match = os.path.join(MADX_OUTPUT, "b2_twiss_before_match_{}.tfs".format(index))
-    b2_tw_after_match = os.path.join(MADX_OUTPUT, "b2_twiss_after_match_{}.tfs".format(index))
+    b2_tw_before_match = os.path.join(output_path, "b2_twiss_before_match_{}.tfs".format(index))
+    b2_tw_after_match = os.path.join(output_path, "b2_twiss_after_match_{}.tfs".format(index))
 
-    common_errors_path = os.path.join(MADX_OUTPUT, "common_errors_{}.tfs".format(index))
+    common_errors_path = os.path.join(output_path, "common_errors_{}.tfs".format(index))
     if os.path.isfile(b1_tw_perturbed_path) and os.path.isfile(b2_tw_perturbed_path):
-        beta_star_b1, delta_mux_b1, delta_muy_b1, delta_dx_b1 = get_input_for_beam(b1_tw_perturbed_path, MODEL_B1, 1)
-        beta_star_b2, delta_mux_b2, delta_muy_b2, delta_dx_b2 = get_input_for_beam(b2_tw_perturbed_path, MODEL_B2, 2)
+        beta_star_b1, delta_mux_b1, delta_muy_b1, delta_dx_b1 = get_input_for_beam(b1_tw_perturbed_path, models["B1"], 1)
+        beta_star_b2, delta_mux_b2, delta_muy_b2, delta_dx_b2 = get_input_for_beam(b2_tw_perturbed_path, models["B2"], 2)
         errors = get_errors_from_file(common_errors_path, b1_errors_file_path, b2_errors_file_path, b1_tw_before_match, b1_tw_after_match, b2_tw_before_match, b2_tw_after_match)
         
         # TODO: when creating validation set: activate it
@@ -124,10 +115,10 @@ def get_errors_from_file(common_errors_path, b1_path, b2_path, b1_tw_before_matc
     return all_errors
 
 
-def create_nominal_twiss(optics):
-    with open(NOMINAL_TWISS_TEMPL, 'r') as template:
+def create_nominal_twiss(optics, nominal_twiss_templ, madx_bin):
+    with open(nominal_twiss_templ, 'r') as template:
         template_str = template.read()
-    madx_wrapper.resolve_and_run_string(template_str % {"OPTICS": COLL_40CM}, madx_path=MADX_PATH)
+    madx_wrapper.resolve_and_run_string(template_str % {"OPTICS": optics}, madx_path=madx_bin)
 
 
 def get_input_for_beam(tw_perturbed_path, mdl_path, beam):
@@ -147,17 +138,18 @@ def get_input_for_beam(tw_perturbed_path, mdl_path, beam):
     return beta_star, delta_mux, delta_muy, delta_dx
 
 
-def main(processes):
-    # create_nominal_twiss(COLL_40CM)
+def main(processes, config):
+    # create_nominal_twiss(config.Optics["coll_40cm"], config.Templates["nominal_twiss"], config.Paths["madx_bin"])
     # create_samples_with_validation("test")
     print("Start")
     all_samples = []
     pool = multiprocessing.Pool(processes)
-    all_samples = pool.map(create_samples_with_validation, range(NUM_SIM))
+    partial_samples_with_validation = partial(create_samples_with_validation, config.Templates, config.Models, config.Optics["coll_40cm"], config.Paths["madx_output"], config.Paths["madx_bin"])
+    all_samples = pool.map(partial_samples_with_validation, range(config.Misc["n_sim"]))
     pool.close()
     pool.join()
-    np.save(PATH_SAVED_DATA, np.array(all_samples, dtype=object))
-    all_samples = np.load(PATH_SAVED_DATA)
+    np.save(config.Paths["saved_data"], np.array(all_samples, dtype=object))
+    all_samples = np.load(config.Paths["saved_data"])
     real_samples = []
     for sample in all_samples:
         if sample is not None:
@@ -167,4 +159,18 @@ def main(processes):
 
 if __name__ == "__main__":
     processes = multiprocessing.cpu_count()
-    main(processes)
+    parser = argparse.ArgumentParser(description='''Script to generate training data.\n''',
+                                     formatter_class=argparse.RawTextHelpFormatter)
+
+    parser.add_argument('-j', dest='processes', default=multiprocessing.cpu_count(),
+                    help='Specify the number of parallel processes to run')
+
+    parser.add_argument('-c', dest='config', default='./config.ini',
+                    help='Path of the configuration file')
+
+    args = parser.parse_args()
+
+    config = ConfigParser.ConfigParser()
+    config.read(args.config)
+
+    main(processes, config)
